@@ -6,11 +6,9 @@
  */
 
 #include <Wire.h>
-#include "U8glib.h"
+#include <LCD5110_Basic.h>
 #include <avr/sleep.h>
 #include <avr/interrupt.h>
-
-U8GLIB_PCD8544 u8g(13, 11, 10, 9, 8);   // SPI Com: SCK = 13, MOSI = 11, CS = 10, A0 = 9, Reset = 8
 
 #define HDC1000_ADDRESS 0x40 /* or 0b1000000 */
 #define HDC1000_RDY_PIN A3   /* Data Ready Pin */
@@ -26,23 +24,32 @@ U8GLIB_PCD8544 u8g(13, 11, 10, 9, 8);   // SPI Com: SCK = 13, MOSI = 11, CS = 10
 #define HDC1000_CONFIGURE_MSB 0x10 /* Get both temperature and humidity */
 #define HDC1000_CONFIGURE_LSB 0x00 /* 14 bit resolution */
 
-#define WAKEUP_PIN  2
-#define LCD_PWR_PIN 3
+#define WAKEUP_PIN     2
+#define SLEEP_MODE_PIN 3
+#define BACK_LIGHT_PIN 7
 
 #define WAKEUP_PERIOD 5
 
+LCD5110 myGLCD(8,9,10,11,12);
+
+bool isSleepMode = true;
 int count;
+
+extern uint8_t SmallFont[];
+extern uint8_t MediumNumbers[];
+extern uint8_t BigNumbers[];
 
 void setup() {
   // Sleep Mode
   pinMode(WAKEUP_PIN, INPUT_PULLUP);
+  pinMode(SLEEP_MODE_PIN, INPUT_PULLUP);
 
   // LCD Power
-  pinMode(LCD_PWR_PIN, OUTPUT);
-  digitalWrite(LCD_PWR_PIN, HIGH);
+  pinMode(BACK_LIGHT_PIN, OUTPUT);
+  digitalWrite(BACK_LIGHT_PIN, HIGH);
 
   // LCD
-  u8g.setColorIndex(1);         // pixel on
+  myGLCD.InitLCD();
 
   // HDC1000
   Wire.begin();
@@ -56,34 +63,49 @@ void setup() {
   Serial.println();
 }
 
-void loop() {
-  float temperature, humidity;
+float calcDiscomfort(float temperature, float humidity) {
+  return 0.81 * temperature + 0.01 * humidity * (0.99 * temperature - 14.3) + 46.3;
+}
 
-  // HDC1000
+void loop() {
+  float temperature, humidity, discomfort;
+ 
   getTemperatureAndHumidity(&temperature, &humidity);
+  discomfort = calcDiscomfort(temperature, humidity);
   Serial.print("Temperature = ");
   Serial.print(temperature);
   Serial.print(" degree, Humidity = ");
   Serial.print(humidity);
   Serial.print("%, Discomfort = ");
-  Serial.println(calcDiscomfort(temperature, humidity));
+  Serial.println(discomfort);
 
-  // LCD
-  // picture loop
-  u8g.firstPage();
-  do {
-    draw(temperature, humidity);
-  } while ( u8g.nextPage() );
+  myGLCD.clrScr();
+  myGLCD.setFont(BigNumbers);
+  myGLCD.printNumF(temperature, 1, RIGHT, 0);
+  myGLCD.setFont(MediumNumbers);
+  myGLCD.printNumF(humidity, 1, LEFT, 32);
+  myGLCD.printNumF(discomfort, 0, RIGHT, 32);
+  myGLCD.setFont(SmallFont);
+  if (isSleepMode) {
+    myGLCD.print("SLP", LEFT, 0);
+  } else {
+    myGLCD.print("CON", LEFT, 0);
+  }
 
   delay(1000);
 
-  // Sleep Mode
-  count++;
-  if (count >= WAKEUP_PERIOD) {
-    Serial.println("Sleep mode start!!");
-    count = 0;
+  // Check Sleep Mode
+  isSleepMode = digitalRead(SLEEP_MODE_PIN);
 
-    sleepAndWakeup(WAKEUP_PIN);
+  // Sleep
+  if (isSleepMode) {
+    count++;
+    if (count >= WAKEUP_PERIOD) {
+      Serial.println("Sleep mode start!!");
+      count = 0;
+  
+      sleepAndWakeup(WAKEUP_PIN);
+    }
   }
 }
 
@@ -102,9 +124,11 @@ int sleepAndWakeup(int interruptNo) {
     Serial.println("WAKEUP_PIN High Level");
   }
   Serial.println("sleep enable");
+  delay(100);
 
   // Sleep
-  digitalWrite(LCD_PWR_PIN, LOW);
+  digitalWrite(BACK_LIGHT_PIN, LOW);
+  myGLCD.enableSleep();
   attachInterrupt(digitalPinToInterrupt(interruptNo), wakeup, FALLING);
   noInterrupts();
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
@@ -115,30 +139,10 @@ int sleepAndWakeup(int interruptNo) {
   // Wakeup
   sleep_disable();
   detachInterrupt(digitalPinToInterrupt(interruptNo));
-  digitalWrite(LCD_PWR_PIN, HIGH);
+  digitalWrite(BACK_LIGHT_PIN, HIGH);
+  myGLCD.disableSleep();
   
   return 0;
-}
-
-//-----------------------------------------------------------------------------------------------
-// LCD
-//-----------------------------------------------------------------------------------------------
-float calcDiscomfort(float temperature, float humidity) {
-  return 0.81 * temperature + 0.01 * humidity * (0.99 * temperature - 14.3) + 46.3;
-}
-
-void draw(float temperature, float humidity) {
-  // graphic commands to redraw the complete screen should be placed here
-  static char strBuff[16];
-  u8g.setFont(u8g_font_7x14B);
-  int temp10 = temperature * 10;
-  sprintf(strBuff, "%2d.%01d%cC", temp10 / 10, temp10 % 10, '\xB0');
-  u8g.drawStr( 0, 12, strBuff);
-  int humd10 = humidity * 10;
-  sprintf(strBuff, "%2d.%01d%%", humd10 / 10, humd10 % 10);
-  u8g.drawStr( 0, 26, strBuff);
-  sprintf(strBuff, "%2d", (int)calcDiscomfort(temperature, humidity));
-  u8g.drawStr( 0, 40, strBuff);
 }
 
 //-----------------------------------------------------------------------------------------------
