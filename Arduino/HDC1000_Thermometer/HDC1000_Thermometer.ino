@@ -1,3 +1,10 @@
+/*
+ * HDC100_Thermometer
+ * 
+ * 2017.02.26
+ * 
+ */
+
 #include <Wire.h>
 #include "U8glib.h"
 #include <avr/sleep.h>
@@ -20,31 +27,39 @@ U8GLIB_PCD8544 u8g(13, 11, 10, 9, 8);   // SPI Com: SCK = 13, MOSI = 11, CS = 10
 #define HDC1000_CONFIGURE_LSB 0x00 /* 14 bit resolution */
 
 #define WAKEUP_PIN  2
+#define LCD_PWR_PIN 3
+
+#define WAKEUP_PERIOD 5
 
 int count;
 
 void setup() {
+  // Sleep Mode
   pinMode(WAKEUP_PIN, INPUT_PULLUP);
 
+  // LCD Power
+  pinMode(LCD_PWR_PIN, OUTPUT);
+  digitalWrite(LCD_PWR_PIN, HIGH);
+
+  // LCD
   u8g.setColorIndex(1);         // pixel on
 
-  Serial.begin(9600);
+  // HDC1000
   Wire.begin();
   pinMode(HDC1000_RDY_PIN, INPUT);
-
   delay(15); /* Wait for 15ms */
   configure();
 
+  Serial.begin(9600);
   Serial.print("Manufacturer ID = 0x");
   Serial.println(getManufacturerId(), HEX);
-
   Serial.println();
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
   float temperature, humidity;
 
+  // HDC1000
   getTemperatureAndHumidity(&temperature, &humidity);
   Serial.print("Temperature = ");
   Serial.print(temperature);
@@ -53,6 +68,7 @@ void loop() {
   Serial.print("%, Discomfort = ");
   Serial.println(calcDiscomfort(temperature, humidity));
 
+  // LCD
   // picture loop
   u8g.firstPage();
   do {
@@ -60,10 +76,11 @@ void loop() {
   } while ( u8g.nextPage() );
 
   delay(1000);
+
+  // Sleep Mode
   count++;
-  if (count >= 10) {
+  if (count >= WAKEUP_PERIOD) {
     Serial.println("Sleep mode start!!");
-    delay(100);
     count = 0;
 
     sleepAndWakeup(WAKEUP_PIN);
@@ -75,29 +92,31 @@ void loop() {
 //-----------------------------------------------------------------------------------------------
 void wakeup() {
   Serial.println("Wakeup!!");
-  delay(100);
 }
 
 int sleepAndWakeup(int interruptNo) {
   Serial.println("sleepAndWake Process start!!");
-  delay(100);
   if (digitalRead(WAKEUP_PIN) == LOW) {
     Serial.println("WAKEUP_PIN Low Level");
-    delay(100);
   } else {
     Serial.println("WAKEUP_PIN High Level");
-    delay(100);
   }
   Serial.println("sleep enable");
-  delay(100);
+
+  // Sleep
+  digitalWrite(LCD_PWR_PIN, LOW);
   attachInterrupt(digitalPinToInterrupt(interruptNo), wakeup, FALLING);
   noInterrupts();
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
   sleep_enable();
   interrupts();
   sleep_cpu();
+
+  // Wakeup
   sleep_disable();
   detachInterrupt(digitalPinToInterrupt(interruptNo));
+  digitalWrite(LCD_PWR_PIN, HIGH);
+  
   return 0;
 }
 
