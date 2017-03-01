@@ -25,12 +25,13 @@
 
 #define HDC1000_CONFIGURE_MSB 0x10 /* Get both temperature and humidity */
 #define HDC1000_CONFIGURE_LSB 0x00 /* 14 bit resolution */
-
+ 
 #define WAKEUP_PIN     2
 #define SLEEP_MODE_PIN 3
-#define BACK_LIGHT_PIN 7
+#define IO_PWR_PIN 7
 
-#define WAKEUP_PERIOD 5
+#define MEASURE_INTERVAL  (1000/2)
+#define WAKEUP_PERIOD 10
 
 LCD5110 myGLCD(8,9,10,11,12);
 
@@ -46,15 +47,16 @@ void setup() {
   pinMode(WAKEUP_PIN, INPUT_PULLUP);
   pinMode(SLEEP_MODE_PIN, INPUT_PULLUP);
 
-  // LCD Power
-  pinMode(BACK_LIGHT_PIN, OUTPUT);
-  digitalWrite(BACK_LIGHT_PIN, HIGH);
+  // I/O Power
+  pinMode(IO_PWR_PIN, OUTPUT);
+  digitalWrite(IO_PWR_PIN, HIGH);
 
   // LCD
   myGLCD.InitLCD();
 
   // HDC1000
   Wire.begin();
+  Wire.setClock(400000);
   pinMode(HDC1000_RDY_PIN, INPUT);
   delay(15); /* Wait for 15ms */
   configure();
@@ -81,7 +83,7 @@ void loop() {
   Serial.print("%, Discomfort = ");
   Serial.println(discomfort);
 
-  myGLCD.clrScr();
+  //myGLCD.clrScr();
   myGLCD.setFont(BigNumbers);
   myGLCD.printNumF(temperature, 1, RIGHT, 0);
   myGLCD.setFont(MediumNumbers);
@@ -94,7 +96,7 @@ void loop() {
     myGLCD.print("CON", LEFT, 0);
   }
 
-  delay(1000);
+  delay(MEASURE_INTERVAL);
 
   // Check Sleep Mode
   isSleepMode = digitalRead(SLEEP_MODE_PIN);
@@ -129,8 +131,8 @@ int sleepAndWakeup(int interruptNo) {
   delay(100);
 
   // Sleep
-  digitalWrite(BACK_LIGHT_PIN, LOW);
   myGLCD.enableSleep();
+  digitalWrite(IO_PWR_PIN, LOW);
   attachInterrupt(digitalPinToInterrupt(interruptNo), wakeup, FALLING);
   noInterrupts();
   set_sleep_mode(SLEEP_MODE_PWR_DOWN);
@@ -141,7 +143,7 @@ int sleepAndWakeup(int interruptNo) {
   // Wakeup
   sleep_disable();
   detachInterrupt(digitalPinToInterrupt(interruptNo));
-  digitalWrite(BACK_LIGHT_PIN, HIGH);
+  digitalWrite(IO_PWR_PIN, HIGH);
   myGLCD.disableSleep();
   
   return 0;
