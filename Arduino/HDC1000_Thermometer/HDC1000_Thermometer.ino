@@ -3,6 +3,8 @@
  * 
  * 2017.02.26
  * 
+ * LCD5110_Basic Library: http://www.rinkydinkelectronics.com/library.php?id=44
+ * 
  */
 
 #include <Wire.h>
