@@ -31,8 +31,9 @@
 #define IO_PWR_PIN 7
 
 #define MEASURE_INTERVAL  (1000/2)
-#define WAKEUP_PERIOD 10
+#define WAKEUP_PERIOD 50
 
+// LCD5110(int SCK, int MOSI, int DC, int RST, int CS);
 LCD5110 myGLCD(8,9,10,11,12);
 
 bool isSleepMode = true;
@@ -83,12 +84,24 @@ void loop() {
   Serial.print("%, Discomfort = ");
   Serial.println(discomfort);
 
+  // 温度の表示
   //myGLCD.clrScr();
   myGLCD.setFont(BigNumbers);
   myGLCD.printNumF(temperature, 1, RIGHT, 0);
+
+  // 湿度の表示
   myGLCD.setFont(MediumNumbers);
-  myGLCD.printNumF(humidity, 1, LEFT, 32);
-  myGLCD.printNumF(discomfort, 0, RIGHT, 32);
+  myGLCD.printNumI(humidity, LEFT, 32);
+
+  myGLCD.setFont(SmallFont);
+  myGLCD.print("%", 30, 32);
+
+  // 不快指数の表示
+  myGLCD.setFont(MediumNumbers
+  );
+  myGLCD.printNumI(discomfort, RIGHT, 32);
+ 
+  // スリープモード/コンティニアスモードの表示
   myGLCD.setFont(SmallFont);
   if (isSleepMode) {
     myGLCD.print("SLP", LEFT, 0);
